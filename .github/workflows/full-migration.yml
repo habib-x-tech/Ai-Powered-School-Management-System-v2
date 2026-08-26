@@ -22,6 +22,16 @@ jobs:
         with:
           node-version: 22
 
+      - name: Patch migration script
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('scripts/migrate-to-vite.mjs')
+          s = p.read_text()
+          s = s.replace('return `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${secure}`;', 'return `${name}=\\${encodeURIComponent(value)}; Max-Age=\\${maxAge}; Path=/; HttpOnly; SameSite=Lax\\${secure}`;')
+          s = s.replace('return new Request(`${req.protocol}://${req.get("host")}${req.originalUrl}`, {', 'return new Request(\\`${req.protocol}://\\${req.get("host")}\\${req.originalUrl}\\`, {')
+          p.write_text(s)
+
       - name: Run migration
         run: node scripts/migrate-to-vite.mjs
 
