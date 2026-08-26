@@ -22,14 +22,25 @@ jobs:
         with:
           node-version: 22
 
-      - name: Patch migration script
+      - name: Patch migration script quoting
         shell: python
         run: |
           from pathlib import Path
           p = Path('scripts/migrate-to-vite.mjs')
           s = p.read_text()
-          s = s.replace('return `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${secure}`;', 'return `${name}=\\${encodeURIComponent(value)}; Max-Age=\\${maxAge}; Path=/; HttpOnly; SameSite=Lax\\${secure}`;')
-          s = s.replace('return new Request(`${req.protocol}://${req.get("host")}${req.originalUrl}`, {', 'return new Request(\\`${req.protocol}://\\${req.get("host")}\\${req.originalUrl}\\`, {')
+          for marker in [
+              "writeFileSync(join(project, 'src/lib/auth.ts'), ",
+              "writeFileSync(join(project, 'server/server.ts'), ",
+          ]:
+              start = s.index(marker) + len(marker)
+              if s[start] != '`':
+                  continue
+              end = s.index('`);', start)
+              inner = s[start + 1:end]
+              inner = inner.replace('\\`', '\\`')
+              inner = inner.replace('`', '\\`')
+              inner = inner.replace('${', '\\${')
+              s = s[:start + 1] + inner + s[end:]
           p.write_text(s)
 
       - name: Run migration
