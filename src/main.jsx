@@ -1,47 +1,85 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GraduationCap, LogIn, Database, Server, Users } from 'lucide-react';
+import {
+  LayoutDashboard, Users, GraduationCap, BookOpen, BookMarked, CalendarCheck,
+  ClipboardList, Bell, BarChart3, Settings, FileText, CalendarDays, LogOut,
+  Plus, Trash2, RefreshCw, Search, CheckCircle2, XCircle, Clock3
+} from 'lucide-react';
 import './style.css';
 
-function App() {
+const API = '/api';
+const getJSON = async (url, options = {}) => {
+  const res = await fetch(`${API}${url}`, { headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+};
+const today = () => new Date().toISOString().slice(0, 10);
+
+function Login({ onLogin }) {
   const [email, setEmail] = useState('admin@school.local');
   const [password, setPassword] = useState('admin123');
-  const [user, setUser] = useState(null);
   const [error, setError] = useState('');
-
-  async function login(e) {
-    e.preventDefault();
-    setError('');
-    const res = await fetch('/api/auth/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await res.json();
-    if (!res.ok) return setError(data.error || 'Login failed');
-    setUser(data.user);
-  }
-
-  if (user) {
-    return <main className="shell">
-      <div className="top"><div className="brand"><GraduationCap size={30}/> <span>AI School Management</span></div><button onClick={() => setUser(null)}>Logout</button></div>
-      <section className="hero"><span className="pill">{user.role.toUpperCase()}</span><h1>Welcome, {user.name}</h1><p>Your simplified Vite + npm school portal is ready.</p></section>
-      <div className="cards">
-        <div className="card"><Database/><h3>SQLite Database</h3><p>Simple local database. No Prisma or database server.</p></div>
-        <div className="card"><Server/><h3>Express API</h3><p>Simple REST API running on port 5000.</p></div>
-        <div className="card"><Users/><h3>Role Based</h3><p>Admin, teacher and student accounts are supported.</p></div>
-      </div>
-    </main>;
-  }
-
-  return <main className="login-page"><form className="login-card" onSubmit={login}>
-    <div className="logo"><GraduationCap size={42}/></div>
-    <h1>AI-Powered School</h1><p>Simple Vite + npm version</p>
-    <label>Email<input value={email} onChange={e=>setEmail(e.target.value)} type="email" /></label>
-    <label>Password<input value={password} onChange={e=>setPassword(e.target.value)} type="password" /></label>
-    {error && <div className="error">{error}</div>}
-    <button className="submit"><LogIn size={18}/> Sign in</button>
-    <small>Demo: admin@school.local / admin123</small>
+  const submit = async e => { e.preventDefault(); setError(''); try { const d = await getJSON('/auth/login',{method:'POST',body:JSON.stringify({email,password})}); localStorage.setItem('school_user',JSON.stringify(d.user)); onLogin(d.user); } catch(err){setError(err.message);} };
+  return <main className="login-page"><form className="login-card" onSubmit={submit}>
+    <div className="brand-mark"><GraduationCap size={42}/></div><h1>School Management</h1><p>Simple Vite + npm portal</p>
+    <label>Email<input value={email} onChange={e=>setEmail(e.target.value)} type="email" required/></label>
+    <label>Password<input value={password} onChange={e=>setPassword(e.target.value)} type="password" required/></label>
+    {error && <div className="alert error">{error}</div>}<button className="primary">Sign in</button>
+    <div className="demo-box"><b>Demo accounts</b><span>Admin: admin@school.local / admin123</span><span>Teacher: teacher@school.local / teacher123</span><span>Student: student@school.local / student123</span></div>
   </form></main>;
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+function Layout({user,onLogout,children,nav,active,setActive}){
+  return <div className="app-shell"><aside className="sidebar"><div className="sidebar-brand"><div className="brand-mark small"><GraduationCap/></div><div><b>KAM</b><span>School Portal</span></div></div><nav>{nav.map(n=><button key={n.key} className={active===n.key?'nav active':'nav'} onClick={()=>setActive(n.key)}>{n.icon}<span>{n.label}</span></button>)}</nav><button className="nav logout" onClick={onLogout}><LogOut/><span>Logout</span></button></aside><main className="content"><header className="topbar"><div><span className="eyebrow">{user.role.toUpperCase()}</span><h2>{nav.find(n=>n.key===active)?.label || 'Dashboard'}</h2></div><div className="user-chip"><span className="avatar">{user.name.slice(0,1).toUpperCase()}</span><div><b>{user.name}</b><small>{user.email}</small></div></div></header>{children}</main></div>;
+}
+
+function Toolbar({title,subtitle,onRefresh,children}){return <div className="section-head"><div><h3>{title}</h3>{subtitle&&<p>{subtitle}</p>}</div><div className="actions"><button className="ghost" onClick={onRefresh}><RefreshCw size={16}/>Refresh</button>{children}</div></div>}
+function Stat({icon,label,value,meta}){return <div className="stat-card"><div className="stat-icon">{icon}</div><div><span>{label}</span><strong>{value}</strong>{meta&&<small>{meta}</small>}</div></div>}
+function Table({columns,rows,empty='No records'}){return <div className="table-wrap"><table><thead><tr>{columns.map(c=><th key={c.key}>{c.label}</th>)}</tr></thead><tbody>{rows.length?rows.map((r,i)=><tr key={r.id??i}>{columns.map(c=><td key={c.key}>{c.render?c.render(r):r[c.key]}</td>)}</tr>):<tr><td colSpan={columns.length} className="empty">{empty}</td></tr>}</tbody></table></div>}
+
+function AdminDashboard({go}){const [d,setD]=useState(null);const load=()=>getJSON('/dashboard').then(setD);useEffect(()=>{load()},[]);if(!d)return <div className="loading">Loading dashboard…</div>;return <><div className="stats-grid"><Stat icon={<Users/>} label="Students" value={d.students} meta="Active records"/><Stat icon={<GraduationCap/>} label="Teachers" value={d.teachers}/><Stat icon={<BookOpen/>} label="Classes" value={d.classes}/><Stat icon={<BarChart3/>} label="Average Marks" value={`${d.averageMarks}%`}/><Stat icon={<ClipboardList/>} label="Exams" value={d.exams}/><Stat icon={<Bell/>} label="Notices" value={d.notices}/></div><div className="panel"><Toolbar title="Quick actions" subtitle="Manage the school from one place" onRefresh={load}/><div className="quick-grid">{[['students','Students','Add and manage student records'],['teachers','Teachers','Manage teachers and subjects'],['attendance','Attendance','Record daily attendance'],['marks','Marks','Enter and update exam marks'],['notices','Notices','Publish school announcements'],['settings','Settings','School configuration']].map(([k,t,s])=><button className="quick" key={k} onClick={()=>go(k)}><div>{t}</div><span>{s}</span></button>)}</div></div></>}
+
+function CrudPage({title,subtitle,endpoint,fields,columns}){
+  const [rows,setRows]=useState([]); const [form,setForm]=useState({}); const [busy,setBusy]=useState(false); const [q,setQ]=useState('');
+  const load=()=>getJSON(endpoint).then(setRows); useEffect(()=>{load()},[endpoint]);
+  const add=async e=>{e.preventDefault();setBusy(true);try{await getJSON(endpoint,{method:'POST',body:JSON.stringify(form)});setForm({});await load();}finally{setBusy(false)}};
+  const remove=async id=>{if(!confirm('Delete this record?'))return;await getJSON(`${endpoint}/${id}`,{method:'DELETE',body:JSON.stringify({})});load();};
+  const filtered=rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q.toLowerCase()));
+  return <div className="stack"><div className="panel form-panel"><Toolbar title={title} subtitle={subtitle} onRefresh={load}/><form className="form-grid" onSubmit={add}>{fields.map(f=><label key={f.key}>{f.label}<input type={f.type||'text'} value={form[f.key]??''} onChange={e=>setForm({...form,[f.key]:e.target.value})} required={f.required!==false}/></label>)}<button className="primary" disabled={busy}><Plus size={16}/>Add</button></form></div><div className="panel"><div className="filter"><Search size={17}/><input placeholder="Search…" value={q} onChange={e=>setQ(e.target.value)}/></div><Table columns={[...columns,{key:'actions',label:'',render:r=><button className="icon-btn danger" onClick={()=>remove(r.id)} title="Delete"><Trash2 size={16}/></button>}]} rows={filtered}/></div></div>;
+}
+
+function Attendance(){const [students,setStudents]=useState([]),[rows,setRows]=useState([]),[form,setForm]=useState({date:today(),status:'present'});const load=()=>Promise.all([getJSON('/students'),getJSON('/attendance')]).then(([s,a])=>{setStudents(s);setRows(a)});useEffect(()=>{load()},[]);const mark=async e=>{e.preventDefault();await getJSON('/attendance',{method:'POST',body:JSON.stringify(form)});load()};return <div className="stack"><div className="panel"><Toolbar title="Daily attendance" subtitle="Mark a student present, absent or late" onRefresh={load}/><form className="form-grid"><label>Student<select value={form.student_id||''} onChange={e=>setForm({...form,student_id:e.target.value})}><option value="">Select student</option>{students.map(s=><option key={s.id} value={s.id}>{s.name} — {s.class_name} / {s.roll_no}</option>)}</select></label><label>Date<input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></label><label>Status<select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option value="present">Present</option><option value="absent">Absent</option><option value="late">Late</option></select></label><button className="primary" onClick={mark}><CheckCircle2 size={16}/>Save</button></form></div><div className="panel"><Table columns={[{key:'date',label:'Date'},{key:'student_name',label:'Student'},{key:'class_name',label:'Class'},{key:'status',label:'Status',render:r=><span className={`status ${r.status}`}>{r.status}</span>}]} rows={rows}/></div></div>}
+
+function Marks(){const [students,setStudents]=useState([]),[exams,setExams]=useState([]),[rows,setRows]=useState([]),[form,setForm]=useState({});const load=()=>Promise.all([getJSON('/students'),getJSON('/exams'),getJSON('/marks')]).then(([s,e,m])=>{setStudents(s);setExams(e);setRows(m)});useEffect(()=>{load()},[]);const save=async e=>{e.preventDefault();await getJSON('/marks',{method:'POST',body:JSON.stringify(form)});load()};return <div className="stack"><div className="panel"><Toolbar title="Marks" subtitle="Enter or update student exam marks" onRefresh={load}/><form className="form-grid"><label>Student<select value={form.student_id||''} onChange={e=>setForm({...form,student_id:e.target.value})}><option value="">Select student</option>{students.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>Exam<select value={form.exam_id||''} onChange={e=>setForm({...form,exam_id:e.target.value})}><option value="">Select exam</option>{exams.map(x=><option key={x.id} value={x.id}>{x.name} — {x.subject}</option>)}</select></label><label>Marks<input type="number" min="0" value={form.marks??''} onChange={e=>setForm({...form,marks:e.target.value})}/></label><button className="primary" onClick={save}>Save marks</button></form></div><div className="panel"><Table columns={[{key:'student_name',label:'Student'},{key:'class_name',label:'Class'},{key:'exam_name',label:'Exam'},{key:'subject',label:'Subject'},{key:'marks',label:'Marks'},{key:'max_marks',label:'Max'}]} rows={rows}/></div></div>}
+
+function StudentHome({user,active}){const [data,setData]=useState(null);const load=()=>getJSON(`/student/${user.id}/overview`).then(setData);useEffect(()=>{load()},[user.id]);if(!data)return <div className="loading">Loading student profile…</div>;if(active==='overview')return <><div className="stats-grid"><Stat icon={<CalendarCheck/>} label="Attendance" value={`${data.student.attendance}%`}/><Stat icon={<BarChart3/>} label="Average Marks" value={`${data.student.marks}%`}/><Stat icon={<BookOpen/>} label="Class" value={data.student.class_name}/><Stat icon={<Users/>} label="Roll No." value={data.student.roll_no}/></div><div className="two-col"><div className="panel"><Toolbar title="Recent results" onRefresh={load}/><Table columns={[{key:'exam_name',label:'Exam'},{key:'subject',label:'Subject'},{key:'marks',label:'Marks'},{key:'max_marks',label:'Max'}]} rows={data.marks.slice(0,6)}/></div><div className="panel"><Toolbar title="Notices" onRefresh={load}/>{data.notices.slice(0,5).map(n=><div className="notice" key={n.id}><b>{n.title}</b><p>{n.message}</p></div>)}</div></div></>;if(active==='results')return <div className="panel"><Toolbar title="My results" onRefresh={load}/><Table columns={[{key:'exam_name',label:'Exam'},{key:'subject',label:'Subject'},{key:'marks',label:'Marks'},{key:'max_marks',label:'Max'},{key:'score',label:'Score',render:r=>`${Math.round((r.marks/r.max_marks)*100)}%`}]} rows={data.marks}/></div>;if(active==='attendance')return <div className="panel"><Toolbar title="Attendance history" onRefresh={load}/><Table columns={[{key:'date',label:'Date'},{key:'status',label:'Status',render:r=><span className={`status ${r.status}`}>{r.status}</span>}]} rows={data.attendance}/></div>;if(active==='notices')return <div className="panel"><Toolbar title="School notices" onRefresh={load}/>{data.notices.map(n=><div className="notice large" key={n.id}><b>{n.title}</b><span>{new Date(n.created_at).toLocaleString()}</span><p>{n.message}</p></div>)}</div>;return <div className="panel"><Toolbar title="Class schedule" onRefresh={load}/><Table columns={[{key:'day',label:'Day'},{key:'period',label:'Period'},{key:'subject',label:'Subject'},{key:'teacher',label:'Teacher'},{key:'room',label:'Room'}]} rows={data.schedule}/></div>}
+
+function App(){const [user,setUser]=useState(()=>{try{return JSON.parse(localStorage.getItem('school_user'))}catch{return null}});const logout=()=>{localStorage.removeItem('school_user');setUser(null)};if(!user)return <Login onLogin={setUser}/>;
+  const adminNav=[['dashboard','Dashboard',LayoutDashboard],['students','Students',Users],['teachers','Teachers',GraduationCap],['classes','Classes',BookOpen],['subjects','Subjects',BookMarked],['attendance','Attendance',CalendarCheck],['exams','Exams',ClipboardList],['marks','Marks',BarChart3],['notices','Notices',Bell],['quizzes','Quizzes',FileText],['schedule','Schedule',CalendarDays],['audit','Audit Log',FileText],['settings','Settings',Settings]].map(([key,label,icon])=>({key,label,icon}));
+  const teacherNav=[['dashboard','Dashboard',LayoutDashboard],['students','Students',Users],['attendance','Attendance',CalendarCheck],['marks','Marks',BarChart3],['exams','Exams',ClipboardList],['notices','Notices',Bell],['quizzes','Quizzes',FileText],['schedule','Schedule',CalendarDays]].map(([key,label,icon])=>({key,label,icon}));
+  const studentNav=[['overview','Overview',LayoutDashboard],['results','Results',BarChart3],['attendance','Attendance',CalendarCheck],['notices','Notices',Bell],['schedule','Schedule',CalendarDays]].map(([key,label,icon])=>({key,label,icon}));
+  const nav=user.role==='admin'?adminNav:user.role==='teacher'?teacherNav:studentNav; const [active,setActive]=useState(nav[0].key); useEffect(()=>{if(!nav.some(n=>n.key===active))setActive(nav[0].key)},[user.role]);
+  let page;
+  if(user.role==='student') page=<StudentHome user={user} active={active}/>;
+  else if(active==='dashboard') page=<AdminDashboard go={setActive}/>;
+  else if(active==='students') page=<CrudPage title="Students" subtitle="Student directory" endpoint="/students" fields={[{key:'name',label:'Name'},{key:'class_name',label:'Class'},{key:'roll_no',label:'Roll No.'},{key:'guardian',label:'Guardian',required:false},{key:'phone',label:'Phone',required:false}]} columns={[{key:'name',label:'Name'},{key:'class_name',label:'Class'},{key:'roll_no',label:'Roll'},{key:'guardian',label:'Guardian'},{key:'phone',label:'Phone'},{key:'attendance',label:'Attendance',render:r=>`${r.attendance}%`},{key:'marks',label:'Marks',render:r=>`${r.marks}%`} ]}/>;
+  else if(active==='teachers') page=<CrudPage title="Teachers" subtitle="Teacher directory" endpoint="/teachers" fields={[{key:'name',label:'Name'},{key:'subject',label:'Subject'},{key:'phone',label:'Phone',required:false},{key:'class_name',label:'Class',required:false}]} columns={[{key:'name',label:'Name'},{key:'subject',label:'Subject'},{key:'class_name',label:'Class'},{key:'phone',label:'Phone'}]}/>;
+  else if(active==='classes') page=<CrudPage title="Classes" subtitle="Class and room management" endpoint="/classes" fields={[{key:'name',label:'Class'},{key:'section',label:'Section',required:false},{key:'room',label:'Room',required:false}]} columns={[{key:'name',label:'Class'},{key:'section',label:'Section'},{key:'room',label:'Room'}]}/>;
+  else if(active==='subjects') page=<CrudPage title="Subjects" subtitle="Subjects by class" endpoint="/subjects" fields={[{key:'name',label:'Name'},{key:'code',label:'Code',required:false},{key:'class_name',label:'Class',required:false}]} columns={[{key:'name',label:'Name'},{key:'code',label:'Code'},{key:'class_name',label:'Class'}]}/>;
+  else if(active==='attendance') page=<Attendance/>;
+  else if(active==='marks') page=<Marks/>;
+  else if(active==='exams') page=<CrudPage title="Exams" subtitle="Exam schedule and maximum marks" endpoint="/exams" fields={[{key:'name',label:'Exam'},{key:'class_name',label:'Class'},{key:'subject',label:'Subject'},{key:'exam_date',label:'Date',type:'date'},{key:'max_marks',label:'Max marks',type:'number'}]} columns={[{key:'name',label:'Exam'},{key:'class_name',label:'Class'},{key:'subject',label:'Subject'},{key:'exam_date',label:'Date'},{key:'max_marks',label:'Max'}]}/>;
+  else if(active==='notices') page=<CrudPage title="Notices" subtitle="Publish announcements" endpoint="/notices" fields={[{key:'title',label:'Title'},{key:'message',label:'Message'},{key:'audience',label:'Audience',required:false}]} columns={[{key:'title',label:'Title'},{key:'message',label:'Message'},{key:'audience',label:'Audience'},{key:'created_at',label:'Created'}]}/>;
+  else if(active==='quizzes') page=<CrudPage title="Quizzes" subtitle="Quiz catalogue" endpoint="/quizzes" fields={[{key:'title',label:'Title'},{key:'subject',label:'Subject'},{key:'class_name',label:'Class'},{key:'questions',label:'Questions',type:'number'},{key:'status',label:'Status',required:false}]} columns={[{key:'title',label:'Title'},{key:'subject',label:'Subject'},{key:'class_name',label:'Class'},{key:'questions',label:'Questions'},{key:'status',label:'Status'}]}/>;
+  else if(active==='schedule') page=<CrudPage title="Schedule" subtitle="Class timetable" endpoint="/timetable" fields={[{key:'day',label:'Day'},{key:'period',label:'Period'},{key:'class_name',label:'Class'},{key:'subject',label:'Subject'},{key:'teacher',label:'Teacher',required:false},{key:'room',label:'Room',required:false}]} columns={[{key:'day',label:'Day'},{key:'period',label:'Period'},{key:'class_name',label:'Class'},{key:'subject',label:'Subject'},{key:'teacher',label:'Teacher'},{key:'room',label:'Room'}]}/>;
+  else if(active==='audit') page=<CrudRead endpoint="/audit" title="Audit Log" columns={[{key:'created_at',label:'Time'},{key:'action',label:'Action'},{key:'actor',label:'Actor'},{key:'details',label:'Details'}]}/>;
+  else if(active==='settings') page=<SettingsPage/>;
+  else page=<AdminDashboard go={setActive}/>;
+  return <Layout user={user} onLogout={logout} nav={nav} active={active} setActive={setActive}>{page}</Layout>;
+}
+
+function CrudRead({endpoint,title,columns}){const [rows,setRows]=useState([]);const load=()=>getJSON(endpoint).then(setRows);useEffect(()=>{load()},[]);return <div className="panel"><Toolbar title={title} onRefresh={load}/><Table columns={columns} rows={rows}/></div>}
+function SettingsPage(){const [health,setHealth]=useState(null);const load=()=>getJSON('/health').then(setHealth);useEffect(()=>{load()},[]);return <div className="panel"><Toolbar title="Settings" subtitle="Simple local configuration" onRefresh={load}/><div className="settings-grid"><div className="setting"><b>Database</b><span>SQLite local file</span></div><div className="setting"><b>Backend</b><span>Node.js + Express</span></div><div className="setting"><b>Package manager</b><span>npm only</span></div><div className="setting"><b>API status</b><span className="status present">{health?.ok?'Online':'Checking…'}</span></div></div></div>}
+
+createRoot(document.getElementById('root')).render(<App/>);
